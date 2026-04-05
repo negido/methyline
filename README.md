@@ -14,53 +14,9 @@ The pipeline covers the full analysis workflow, from raw read quality control th
 > ⚠️ **This pipeline is under active development.** Tool selection and module implementation are ongoing. The current repository reflects the architectural design; functional modules will be progressively integrated.
 
 ---
-
 ## Pipeline Overview
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                        METHYLINE                        │
-│          EM-seq Analysis Pipeline (Nextflow DSL2)       │
-└─────────────────────────────────────────────────────────┘
-
-  Raw reads (FASTQ)
-       │
-       ▼
-┌─────────────┐
-│  1. QC &    │  Quality control and adapter/quality trimming
-│  Trimming   │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  2. Align-  │  Bisulfite-aware alignment to reference genome
-│   ment      │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  3. Methyl- │  CpG methylation extraction and quantification
-│  Extraction │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  4. DMR     │  Identification of differentially methylated
-│  Analysis   │  regions across sample groups
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  5. Funct.  │  Genomic annotation and functional enrichment
-│  Annotation │  of DMRs
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  6. Visual- │  Automated report generation and result
-│  isation    │  visualisation
-└─────────────┘
-```
+![Methyline workflow](images/workflowlightmode.png)
 
 ---
 
@@ -89,9 +45,9 @@ The pipeline covers the full analysis workflow, from raw read quality control th
 
 ## Requirements
 
-- [Nextflow](https://www.nextflow.io/) >= 23.04.0
-- [Docker](https://www.docker.com/) or [Singularity](https://sylabs.io/) (recommended for reproducibility)
-- Java >= 11
+- [Nextflow](https://www.nextflow.io/)
+- [Docker](https://www.docker.com/) 
+- Java 
 
 ---
 
@@ -101,7 +57,7 @@ The pipeline covers the full analysis workflow, from raw read quality control th
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/methyline.git
+git clone https://github.com/negido/methyline.git
 cd methyline
 
 # Run the pipeline (Docker profile)
