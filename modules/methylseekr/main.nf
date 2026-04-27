@@ -1,25 +1,38 @@
 process methylseekr {
     tag "$sampleId"
     label 'medium'
-    container 'quay.io/biocontainers/bioconductor-methylseekr:1.50.0--r45hdfd78af_0'
-
+    container 'negido/methylseekr_hs_bsgenome:v1.0'
     input:
     tuple val(sampleId), path(methylation_bed)
-    path genome_fasta
-
     output:
-    tuple val("${sampleId}_UMR"), path("*_UMRs.bed"), emit: umrs
-    tuple val("${sampleId}_LMR"), path("*_LMRs.bed"), emit: lmrs
-    tuple val("${sampleId}_PMD"), path("*_PMDs.bed"), emit: pmds
-
+    tuple val(sampleId), path("${sampleId}_PMDs.bed"), emit: pmds
+    tuple val(sampleId), path("${sampleId}_UMRs.bed"), emit: umrs
+    tuple val(sampleId), path("${sampleId}_LMRs.bed"), emit: lmrs
+    tuple val(sampleId), path("${sampleId}_segmentUMRsLMRs.pdf"), emit: segmentation_plot
+    tuple val(sampleId), path("${sampleId}_finalSegmentation.pdf"), emit: final_plot
     script:
     """
     Rscript - <<'EOF'
     library(MethylSeekR)
-    library(Biostrings)
+    library(GenomicRanges)
+    library(BSgenome)
     library(rtracklayer)
 
-    skip_header <- startsWith(readLines("${methylation_bed}", n = 1, warn = FALSE), "track")
+    # ---- Cargar BSgenome ----
+    if ("${params.referenceGenome}" == "hg38") {
+        library(BSgenome.Hsapiens.UCSC.hg38)
+        myGenomeSeq <- BSgenome.Hsapiens.UCSC.hg38
+    } else {
+        library(BSgenome.Hsapiens.UCSC.hg19)
+        myGenomeSeq <- BSgenome.Hsapiens.UCSC.hg19
+    }
+
+    # ---- Seq lengths ----
+    seqLengths <- seqlengths(myGenomeSeq)
+
+    # ---- Leer BED ----
+    first_line <- readLines("${methylation_bed}", n = 1, warn = FALSE)
+    skip_header <- length(first_line) > 0 && startsWith(first_line, "track")
 
     bed <- read.table(
         "${methylation_bed}",
@@ -32,18 +45,11 @@ process methylseekr {
         fill = TRUE
     )
 
-    seq_idx <- Biostrings::fasta.index("${params.referenceGenome}.fa")
-    len_col <- if ("seqlengths" %in% colnames(seq_idx)) "seqlengths" else "seqlength"
-    name_col <- if ("seqnames" %in% colnames(seq_idx)) "seqnames" else "desc"
-    seq_names <- vapply(
-        strsplit(as.character(seq_idx[[name_col]]), " ", fixed = TRUE),
-        `[`,
-        character(1),
-        1
-    )
-    seqLengths <- stats::setNames(as.integer(seq_idx[[len_col]]), seq_names)
+    bed <- bed[!is.na(bed[[1]]) & !is.na(bed[[2]]) & !is.na(bed[[5]]) & !is.na(bed[[6]]), ]
 
+    # ---- Crear methylome ----
     methylome_file <- tempfile(fileext = ".tab")
+
     write.table(
         data.frame(
             chr = bed[[1]],
@@ -59,8 +65,10 @@ process methylseekr {
     )
 
     meth.gr <- readMethylome(FileName = methylome_file, seqLengths = seqLengths)
+
     chr.sel <- if ("chr1" %in% seqlevels(meth.gr)) "chr1" else seqlevels(meth.gr)[1]
 
+    # ---- PMDs ----
     pmd_segments <- segmentPMDs(
         m = meth.gr,
         chr.sel = chr.sel,
@@ -69,22 +77,40 @@ process methylseekr {
         nCGbin = 101
     )
 
-    if (is.list(pmd_segments) && !inherits(pmd_segments, "GRanges")) {
-        pmd_segments <- Filter(Negate(is.null), pmd_segments)
-        if (length(pmd_segments) > 0) {
-            pmd_segments <- do.call(c, pmd_segments)
-        }
-    }
+    pmds <- pmd_segments[pmd_segments$type == "PMD"]
+    rtracklayer::export(pmds, "${sampleId}_PMDs.bed", format = "bed")
 
-    if (!inherits(pmd_segments, "GRanges")) {
-        stop(paste0("segmentPMDs returned unsupported object of class: ", paste(class(pmd_segments), collapse = ", ")))
-    }
+    # ---- UMR / LMR ----
+    umr_lmr <- segmentUMRsLMRs(
+        m = meth.gr,
+        meth.cutoff = 0.5,
+        nCpG.cutoff = 3,
+        PMDs = pmd_segments,
+        pdfFilename = "${sampleId}_segmentUMRsLMRs.pdf",
+        num.cores = 1,
+        myGenomeSeq = myGenomeSeq,
+        seqLengths = seqLengths,
+        nCpG.smoothing = 3,
+        minCover = 5
+    )
 
-    pmds <- pmd_segments[pmd_segments\$type == "PMD"]
-    export.bed(pmds, con = "${sampleId}_PMDs.bed")
+    umrs <- umr_lmr[umr_lmr$type == "UMR"]
+    lmrs <- umr_lmr[umr_lmr$type == "LMR"]
 
-    file.create("${sampleId}_UMRs.bed")
-    file.create("${sampleId}_LMRs.bed")
+    rtracklayer::export(umrs, "${sampleId}_UMRs.bed", format = "bed")
+    rtracklayer::export(lmrs, "${sampleId}_LMRs.bed", format = "bed")
+
+    # ---- Plot final ----
+    plotFinalSegmentation(
+        m = meth.gr,
+        segs = umr_lmr,
+        PMDs = pmd_segments,
+        meth.cutoff = 0.5,
+        numRegions = 3,
+        pdfFilename = "${sampleId}_finalSegmentation.pdf",
+        minCover = 5,
+        nCpG.smoothing = 3
+    )
 
     cat("MethylSeekR completed\\n")
     EOF

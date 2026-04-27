@@ -35,7 +35,7 @@ workflow {
 
     // Extraccion de metilacion y segmentacion de regiones
     methylDackel(markDuplicates.out.MARKED_DUP, file(params.genome_fasta))
-    methylseekr(methylDackel.out.bedgraph, file(params.genome_fasta))
+    methylseekr(methylDackel.out.bedgraph)
 
     // Rama comparativa vs single-sample
     if (!params.single_sample) {
