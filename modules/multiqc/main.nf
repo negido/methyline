@@ -1,6 +1,7 @@
 process multiQC {
     label 'single'
     container 'multiqc/multiqc:v1.33'
+    publishDir "${params.analysisName}/html", mode: 'copy'
     input:
     path inputs
 

@@ -3,6 +3,10 @@ process annotatr {
 	label 'medium'
     container 'quay.io/biocontainers/bioconductor-annotatr:1.36.0--r45hdfd78af_0'
 
+    publishDir "${params.analysisName}/tsv", mode: 'copy', pattern: "*_annotated.tsv"
+    publishDir "${params.analysisName}/tsv", mode: 'copy', pattern: "*_annotation_summary.tsv"
+    publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "*_annotation_bar.pdf"
+
 	input:
 	tuple val(sampleId), path(dmr_bed)
     val referenceGenome

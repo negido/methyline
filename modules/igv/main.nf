@@ -2,7 +2,7 @@ process igv {
     tag "$sampleId"
     label 'medium'
     container 'negido/igv-reports:v1.0'
-    publishDir "${params.outdir}${results_dir}/html", mode: 'copy', tags: [Type: 'html']
+    publishDir "${params.analysisName}/html", mode: 'copy', tags: [Type: 'html']
     input:
     tuple val(sampleId), path(bam), path(bai), path(methylation_bedgraph)
     path genome_fasta
@@ -13,7 +13,6 @@ process igv {
     tuple val(sampleId), path("${sampleId}_IGV.html"), emit: IGV_HTML
     script:
     def max_regions = params.igv_max_regions ?: 500
-    def results_dir = params.analysisName ?: "${sampleId}/${workflow.sessionId}"
     def has_dmrs = dmr_bed != null && dmr_bed.name != 'NO_FILE'
     """
     # Convertir refGene (UCSC) a BED estándar: chrom txStart txEnd name

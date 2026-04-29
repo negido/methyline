@@ -2,6 +2,9 @@ process rgreat {
     tag "$sampleId"
     label 'medium'
     container  'docker.io/negido/rgreat-local:latest'
+
+	publishDir "${params.analysisName}/tsv", mode: 'copy', pattern: "GREAT_*.tsv"
+	publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "GREAT_*.pdf"
     input:
     tuple val(sampleId), path(dmr_bed)
 

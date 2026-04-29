@@ -2,6 +2,12 @@ process methylseekr {
     tag "$sampleId"
     label 'medium'
     container 'negido/methylseekr_hs_bsgenome:v1.1'
+
+    publishDir "${params.analysisName}/bed", mode: 'copy', pattern: "*_PMDs.bed"
+    publishDir "${params.analysisName}/bed", mode: 'copy', pattern: "*_UMRs.bed"
+    publishDir "${params.analysisName}/bed", mode: 'copy', pattern: "*_LMRs.bed"
+    publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "*_segmentUMRsLMRs.pdf"
+    publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "*_finalSegmentation.pdf"
     input:
     tuple val(sampleId), path(methylation_bed)
     output:
