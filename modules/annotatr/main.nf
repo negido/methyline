@@ -2,107 +2,92 @@ process annotatr {
 	tag "$sampleId"
 	label 'medium'
     container 'quay.io/biocontainers/bioconductor-annotatr:1.36.0--r45hdfd78af_0'
+
 	input:
 	tuple val(sampleId), path(dmr_bed)
     val referenceGenome
 
-	output:
-	tuple val(sampleId), path("*_annotated.txt"), emit: annotations
+    output:
+    tuple val(sampleId), path("${sampleId}_annotated.tsv"), emit: annotations
+    tuple val(sampleId), path("${sampleId}_annotation_summary.tsv"), emit: summary
+    tuple val(sampleId), path("${sampleId}_annotation_bar.pdf"), emit: bar_plot
 
-	script:
+
+    script:
+    def txdb_pkg = (referenceGenome == "hg38")
+        ? "TxDb.Hsapiens.UCSC.hg38.knownGene"
+        : "TxDb.Hsapiens.UCSC.hg19.knownGene"
     """
-    Rscript -e '
+    export TXDB_PKG="${txdb_pkg}"
+    export GENOME="${referenceGenome}"
+    export SID="${sampleId}"
+
+    Rscript - <<'EOF'
+    BiocManager::install(c(Sys.getenv("TXDB_PKG"), "org.Hs.eg.db"), ask = FALSE, update = FALSE)
+
     library(annotatr)
     library(GenomicRanges)
-    library(readr)
-        library(dplyr)
 
-        # ----------------------------
-        # 1. Leer BED de regiones
-        # ----------------------------
-        dmr <- tryCatch(
-            read_tsv("${dmr_bed}", col_names = c("chr", "start", "end"), show_col_types = FALSE, progress = FALSE),
-            error = function(e) tibble::tibble(chr = character(), start = integer(), end = integer())
+    genome <- Sys.getenv("GENOME")
+    sid    <- Sys.getenv("SID")
+
+    annots <- build_annotations(
+        genome      = genome,
+        annotations = c(
+            paste0(genome, "_cpg_islands"),
+            paste0(genome, "_cpg_shores"),
+            paste0(genome, "_cpg_shelves"),
+            paste0(genome, "_cpg_inter"),
+            paste0(genome, "_genes_promoters"),
+            paste0(genome, "_genes_exons"),
+            paste0(genome, "_genes_introns"),
+            paste0(genome, "_genes_intergenic")
         )
-
-        dmr <- dmr %>%
-            transmute(
-                chr = as.character(chr),
-                start = suppressWarnings(as.integer(start)),
-                end = suppressWarnings(as.integer(end))
-            ) %>%
-            filter(!is.na(chr), chr != "", !is.na(start), !is.na(end), end >= start)
-
-        if (nrow(dmr) == 0) {
-            write.table(
-                data.frame(),
-                file = "${sampleId}_annotated.txt",
-                sep = "\\t",
-                quote = FALSE,
-                row.names = FALSE,
-                col.names = TRUE
-            )
-            quit(save = "no", status = 0)
-        }
-
-        gr <- GRanges(
-            seqnames = dmr[["chr"]],
-            ranges = IRanges(start = dmr[["start"]], end = dmr[["end"]])
-        )
-
-    # ----------------------------
-    # 2. Seleccionar anotaciones
-    # ----------------------------
-    genome <- "${referenceGenome}"
-
-    core_annotations <- c(
-        paste0(genome, "_cpg_islands"),
-        paste0(genome, "_cpg_shores"),
-        paste0(genome, "_cpg_shelves")
     )
 
-    requested_annotations <- c(paste0(genome, "_basicgenes"), core_annotations)
-
-    annots <- tryCatch(
-        build_annotations(genome = genome, annotations = requested_annotations),
-        error = function(e) {
-            message(paste0(">> annotatr: basicgenes no disponible (", conditionMessage(e), "). Se continúa con anotaciones CpG."))
-            build_annotations(genome = genome, annotations = core_annotations)
-        }
+    regions <- read_regions(
+        con          = "${dmr_bed}",
+        genome       = genome,
+        format       = "bed",
+        rename_score = "mean_meth_diff"
     )
 
-    # ----------------------------
-    # 3. Anotar regiones
-    # ----------------------------
-    annotated <- tryCatch(
-        annotate_regions(
-            regions = gr,
-            annotations = annots,
-            ignore.strand = TRUE,
-            quiet = FALSE
-        ),
-        error = function(e) {
-            if (grepl("No annotations intersect the regions", conditionMessage(e), fixed = TRUE)) {
-                message(">> annotatr: no hay intersecciones con las anotaciones; se exporta tabla vacía")
-                NULL
-            } else {
-                stop(e)
-            }
-        }
+    if (length(regions) == 0) {
+        write.table(data.frame(), file = paste0(sid, "_annotated.tsv"),
+                    sep = "\\t", quote = FALSE, row.names = FALSE)
+        write.table(data.frame(), file = paste0(sid, "_annotation_summary.tsv"),
+                    sep = "\\t", quote = FALSE, row.names = FALSE)
+        pdf(paste0(sid, "_annotation_bar.pdf"))
+        plot.new(); text(0.5, 0.5, "No regions to annotate")
+        dev.off()
+        quit(save = "no", status = 0)
+    }
+
+    annotated <- annotate_regions(
+        regions       = regions,
+        annotations   = annots,
+        ignore.strand = TRUE,
+        quiet         = FALSE
     )
 
-    # ----------------------------
-    # 4. Convertir a tabla y exportar
-    # ----------------------------
-    annotated_df <- if (is.null(annotated)) data.frame() else as.data.frame(annotated)
+    write.table(as.data.frame(annotated),
+                file = paste0(sid, "_annotated.tsv"),
+                sep = "\\t", quote = FALSE, row.names = FALSE)
 
-    write.table(
-        annotated_df,
-        file = "${sampleId}_annotated.txt",
-        sep = "\\t",
-        quote = FALSE,
-        row.names = FALSE
+    annot_summary <- summarize_annotations(annotated_regions = annotated, quiet = FALSE)
+    write.table(as.data.frame(annot_summary),
+                file = paste0(sid, "_annotation_summary.tsv"),
+                sep = "\\t", quote = FALSE, row.names = FALSE)
+
+    pdf(paste0(sid, "_annotation_bar.pdf"))
+    plot_annotation(
+        annotated_regions = annotated,
+        annotation_order  = NULL,
+        plot_title        = paste0("DMR annotation — ", sid),
+        x_label           = "Annotation type",
+        y_label           = "Count"
     )
-    '
+    dev.off()
+    EOF
     """
 }

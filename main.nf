@@ -44,15 +44,15 @@ workflow {
             methylDackel.out.bedgraph
                 .map { sampleId, bedgraph -> bedgraph }
                 .collect(),
-            params.design_matrix ? file(params.design_matrix) : file(params.empty_design),
             methylseekr.out.pmds
                 .map { sampleId, pmd -> pmd }
-                .collect()
+                .collect(),
+            params.design_matrix ? file(params.design_matrix) : file(params.empty_design)
         )
 
             // Anotacion funcional de DMR
         annotatr(dss.out.dmr_bed,params.referenceGenome)
-        rgreat(dss.out.dmr_bed,params.referenceGenome)
+        rgreat(dss.out.dmr_bed)
 
             // Informe calidad
         multiQC(
@@ -65,6 +65,16 @@ workflow {
                 .mix(dss.out.status)
                 .collect()
         )
+
+        // Visualizacion IGV con DMRs como regiones de interés
+        igv(
+            markDuplicates.out.MARKED_DUP
+                .join(methylDackel.out.bedgraph),
+            file(params.genome_fasta),
+            params.referenceGenome,
+            file(params.refGene),
+            dss.out.dmr_bed.ifEmpty { file("NO_FILE") }
+        )
     } else {
         // Anotacion funcional de regiones LMR/UMR/PMD
         annotatr(methylseekr.out.lmrs
@@ -74,8 +84,7 @@ workflow {
         rgreat(
             methylseekr.out.lmrs
                 .mix(methylseekr.out.umrs)
-                .mix(methylseekr.out.pmds),
-            params.referenceGenome
+                .mix(methylseekr.out.pmds)
         )
 
         // Informe calidad
@@ -88,14 +97,15 @@ workflow {
                 .mix(markDuplicates.out.MD_METRICS)
                 .collect()
         )
-    }
 
-    // Visualizacion IGV
-    igv(
-        markDuplicates.out.MARKED_DUP
-            .join(methylDackel.out.bedgraph),
-        file(params.genome_fasta),
-        params.referenceGenome,
-        file(params.refGene)
-    )
+        // Visualizacion IGV sin DMRs (muestreo de bedGraph)
+        igv(
+            markDuplicates.out.MARKED_DUP
+                .join(methylDackel.out.bedgraph),
+            file(params.genome_fasta),
+            params.referenceGenome,
+            file(params.refGene),
+            file("NO_FILE")
+        )
+    }
 }

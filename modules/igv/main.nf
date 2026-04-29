@@ -8,24 +8,46 @@ process igv {
     path genome_fasta
     val referenceGenome
     path refGene
+    tuple val(dmr), path(dmr_bed)
     output:
     tuple val(sampleId), path("${sampleId}_IGV.html"), emit: IGV_HTML
     script:
-        max_regions = params.igv_max_regions ?: 500
-    results_dir = params.analysisName ? "" : "/${sampleId}/${workflow.sessionId}"
+    def max_regions = params.igv_max_regions ?: 500
+    def results_dir = params.analysisName ?: "${sampleId}/${workflow.sessionId}"
+    def has_dmrs = dmr_bed != null && dmr_bed.name != 'NO_FILE'
     """
-    zcat ${refGene} > refgene.refgene
-        awk 'BEGIN {FS=OFS="\t"} \$0 !~ /^track/ && NF >= 3 {print \$1, \$2, \$3}' ${methylation_bedgraph} | head -n ${max_regions} > igv_regions.bed
-        awk 'BEGIN {FS=OFS="\t"} \$0 !~ /^track/ && NF >= 4 {print \$1, \$2, \$3, \$4}' ${methylation_bedgraph} | head -n ${max_regions} > igv_track.bedGraph
+    # Convertir refGene (UCSC) a BED estándar: chrom txStart txEnd name
+    # Columnas refGene: bin name chrom strand txStart txEnd ...
+    zcat ${refGene} \
+    | awk 'BEGIN {FS=OFS="\\t"} !/^#/ && NF >= 6 {print \$3, \$5, \$6, \$2}' \
+    > refgene.bed
 
-        if [ ! -s igv_regions.bed ]; then
-            awk 'BEGIN {OFS="\t"; print "chr1", 1, 1000}' > igv_regions.bed
-        fi
+    # Si hay DMRs (modo multisample), usar como regiones de interés
+    # Si no, muestrear aleatoriamente del bedGraph (modo single-sample)
+    if ${has_dmrs}; then
+        cp ${dmr_bed} igv_regions.bed
+    else
+        grep -v "^track" ${methylation_bedgraph} \
+            | shuf -n ${max_regions} \
+            | sort -k1,1 -k2,2n \
+            | awk 'BEGIN {FS=OFS="\\t"} NF >= 3 {print \$1, \$2, \$3}' \
+            > igv_regions.bed
+    fi
 
-        if [ ! -s igv_track.bedGraph ]; then
-            cp ${methylation_bedgraph} igv_track.bedGraph
-        fi
+    grep -v "^track" ${methylation_bedgraph} \
+        | awk 'BEGIN {FS=OFS="\\t"} NF >= 4 {print \$1, \$2, \$3, \$4}' \
+        > igv_track.bedGraph
 
-        create_report igv_regions.bed ${params.referenceGenome}.fa --samples ${sampleId} --tracks igv_track.bedGraph ${bam} refgene.refgene --output ${sampleId}_IGV.html
+    if [ ! -s igv_regions.bed ]; then
+        grep -v "^track" ${methylation_bedgraph} \
+            | awk 'BEGIN {FS=OFS="\\t"} NF >= 3 {print \$1, \$2, \$3}' \
+            | head -n ${max_regions} > igv_regions.bed
+    fi
+
+    create_report igv_regions.bed ${params.referenceGenome}.fa \
+        --flanking 1000 \
+        --tracks igv_track.bedGraph ${bam} refgene.bed \
+        --standalone \
+        --output ${sampleId}_IGV.html
     """
 }
