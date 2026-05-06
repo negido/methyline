@@ -6,12 +6,16 @@ process methylseekr {
     publishDir "${params.analysisName}/bed", mode: 'copy', pattern: "*_PMDs.bed"
     publishDir "${params.analysisName}/bed", mode: 'copy', pattern: "*_UMRs.bed"
     publishDir "${params.analysisName}/bed", mode: 'copy', pattern: "*_LMRs.bed"
+    publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "*_segmentPMDs.pdf"
+    publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "*_plotPMDSegmentation.pdf"
     publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "*_segmentUMRsLMRs.pdf"
     publishDir "${params.analysisName}/pdf", mode: 'copy', pattern: "*_finalSegmentation.pdf"
     input:
     tuple val(sampleId), path(methylation_bed)
     output:
     tuple val(sampleId), path("${sampleId}_PMDs.bed"), emit: pmds
+    tuple val(sampleId), path("${sampleId}_segmentPMDs.pdf"), emit: pmds_plot, optional: true
+    tuple val(sampleId), path("${sampleId}_plotPMDSegmentation.pdf"), emit: pmds_example, optional: true
     tuple val(sampleId), path("${sampleId}_UMRs.bed"), emit: umrs
     tuple val(sampleId), path("${sampleId}_LMRs.bed"), emit: lmrs
     tuple val(sampleId), path("${sampleId}_segmentUMRsLMRs.pdf"), emit: segmentation_plot, optional: true
@@ -69,6 +73,7 @@ process methylseekr {
     pmd_segments <- segmentPMDs(
         m          = meth.gr,
         chr.sel    = chr.sel,
+        pdfFilename = "${sampleId}_segmentPMDs.pdf",
         seqLengths = seqLengths,
         num.cores  = 1,
         nCGbin     = 101
@@ -76,7 +81,16 @@ process methylseekr {
 
     savePMDSegments(
         PMDs            = pmd_segments,
-        GRangesFilename = "${sampleId}_PMDs.bed"
+        GRangesFilename = "${sampleId}_PMDs.rds",
+        TableFilename   = "${sampleId}_PMDs.bed"
+    )
+
+    plotPMDSegmentation(
+        m           = meth.gr,
+        segs        = pmd_segments,
+        numRegions  = 1,
+        pdfFilename = "${sampleId}_plotPMDSegmentation.pdf",
+        minCover    = 1
     )
 
     umr_lmr <- segmentUMRsLMRs(
