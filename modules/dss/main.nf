@@ -46,7 +46,14 @@ process dss {
     BSobj <- BSobj[keep, ]
 
     # Diseño y grupos
-    design <- read.table(Sys.getenv("DESIGN"), header = TRUE, sep = "", stringsAsFactors = FALSE)
+    design_file <- Sys.getenv("DESIGN")
+    if (file.exists(design_file) && file.size(design_file) > 0) {
+        design <- read.table(design_file, header = TRUE, sep = "", stringsAsFactors = FALSE)
+    } else {
+        # Crear diseño automático: cada muestra es su propio grupo
+        sn <- colnames(BSobj)
+        design <- data.frame(sample = sn, group = paste0("Group_", seq_along(sn)))
+    }
     groups <- unique(trimws(design[["group"]]))
     message(paste0(">> Grupos: ", paste(groups, collapse = ", ")))
 

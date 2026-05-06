@@ -1,70 +1,91 @@
 # 🧬 Methyline
 
-> A modular and reproducible Nextflow pipeline for Enzymatic Methyl-seq (EM-seq) data analysis
+> A modular Nextflow DSL2 pipeline for Enzymatic Methyl-seq (EM-seq) analysis
 
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 
 ## Overview
 
-**Methyline** is a modular, reproducible bioinformatics pipeline built with [Nextflow DSL2](https://www.nextflow.io/) for the end-to-end analysis of Enzymatic Methyl-seq (EM-seq) data. It is designed to be applicable to both clinical and research settings, prioritising reproducibility, portability, and ease of use.
+**Methyline** is a reproducible bioinformatics workflow for EM-seq data analysis built with [Nextflow DSL2](https://www.nextflow.io/). The current pipeline covers the main stages of methylation analysis:
 
-The pipeline covers the full analysis workflow, from raw read quality control through to functional annotation of differentially methylated regions (DMRs) and result visualisation.
+- raw read quality control and trimming
+- bisulfite-aware alignment
+- duplicate marking and methylation extraction
+- methylome segmentation with MethylSeekR
+- differential methylation analysis with DSS
+- genomic and functional annotation of DMRs
+- IGV-based visualisation and reporting
 
-> ⚠️ **This pipeline is under active development.** Tool selection and module implementation are ongoing. The current repository reflects the architectural design; functional modules will be progressively integrated.
+The workflow supports two execution modes:
+
+- **comparative mode**: runs DSS on a design matrix to identify DMRs
+- **single-sample mode**: skips DSS and focuses on methylome segmentation and annotation
 
 ---
+
 ## Pipeline Overview
 
 ![Methyline workflow](images/workflowlightmode.png)
 
 ---
 
-## Features
+## Current Workflow
 
-- **Modular design**: each analysis step is implemented as an independent Nextflow module, allowing flexible execution and easy substitution of tools
-- **Reproducible**: full containerisation support via Docker and Singularity
-- **Portable**: runs locally, on HPC clusters (SLURM, LSF), or cloud environments (AWS, Google Cloud)
-- **EM-seq optimised**: tool selection is specifically evaluated for compatibility with EM-seq data characteristics
-- **Automated reporting**: integrated generation of quality and methylation summary reports
+| Step | Module | Description |
+|------|--------|-------------|
+| 1 | QC & Trimming | FastQC, Trim Galore!, MultiQC |
+| 2 | Alignment | BWA-Meth alignment to the selected reference genome |
+| 3 | Duplicate Marking | PCR duplicate marking on aligned BAM files |
+| 4 | Methylation Extraction | MethylDackel methylation calls and bedGraph generation |
+| 5 | Segmentation | MethylSeekR detection of PMDs, UMRs and LMRs |
+| 6 | DMR Analysis | DSS differential methylation calling in comparative mode |
+| 7 | Annotation | annotatr and rGREAT downstream interpretation |
+| 8 | Visualisation | IGV snapshots and summary PDFs |
 
 ---
 
-## Pipeline Modules
+## Features
 
-| Step | Module | Description | Status |
-|------|--------|-------------|--------|
-| 1 | QC & Trimming | Raw read quality assessment and adapter trimming | 🔧 In development |
-| 2 | Alignment | Bisulfite-aware alignment to reference genome | 🔧 In development |
-| 3 | Methylation Extraction | CpG methylation calling and quantification | 🔧 In development |
-| 4 | DMR Analysis | Differential methylation analysis across conditions | 🔧 In development |
-| 5 | Functional Annotation | Annotation of DMRs with genomic features and pathway enrichment | 🔧 In development |
-| 6 | Visualisation | QC plots, methylation profiles and summary HTML report | 🔧 In development |
+- **Modular design**: each analysis stage is implemented as an independent Nextflow module
+- **Reproducible execution**: container support with Docker
+- **EM-seq aware**: tool choices are adapted to methylation sequencing data
+- **Flexible branching**: comparative and single-sample paths are both supported
+- **Rich outputs**: PMD/UMR/LMR segmentation, DMR calls, annotation and PDF reports
 
 ---
 
 ## Requirements
 
 - [Nextflow](https://www.nextflow.io/)
-- [Docker](https://www.docker.com/) 
-- Java 
+- [Docker](https://www.docker.com/)
+- Java
+
+The repository includes a Docker profile in `nextflow.config`.
 
 ---
 
 ## Quick Start
-
-> ⚠️ Execution instructions will be updated as modules are implemented.
 
 ```bash
 # Clone the repository
 git clone https://github.com/negido/methyline.git
 cd methyline
 
-# Run the pipeline (Docker profile)
+# Comparative analysis (with design matrix)
 nextflow run main.nf \
-  --input samplesheet.csv \
-  --genome hg38 \
-  --outdir results/ \
+  --reads 'test-data/*_{1,2}.fastq.gz' \
+  --referenceGenome hg19 \
+  --design_matrix 'design.tsv' \
+  --analysisName analysis_test \
+  -profile docker
+
+# Segmentation-only analysis (no design matrix)
+nextflow run main.nf \
+  --reads 'test-data/*_{1,2}.fastq.gz' \
+  --referenceGenome hg19 \
+  --analysisName analysis_test \
+  --single_sample true \
   -profile docker
 ```
 
@@ -72,47 +93,90 @@ nextflow run main.nf \
 
 ## Input
 
-The pipeline accepts a **samplesheet** in CSV format specifying sample identifiers, paths to FASTQ files, and experimental group metadata. Full samplesheet specification will be documented upon module completion.
+The pipeline expects paired-end FASTQ files matched by a glob pattern. By default it uses:
+
+```bash
+test-data/*_{1,2}.fastq.gz
+```
+
+### Comparative mode
+
+When running DSS, provide a design matrix with at least these columns:
 
 | Column | Description |
 |--------|-------------|
-| `sample` | Unique sample identifier |
-| `fastq_1` | Path to R1 FASTQ file |
-| `fastq_2` | Path to R2 FASTQ file (paired-end) |
-| `condition` | Experimental group (e.g. `case`, `control`) |
+| `sample` | Sample identifier matching the FASTQ pair |
+| `group` | Biological group or condition |
+
+### Single-sample mode
+
+No design matrix is required when `--single_sample true`.
+
+---
+
+## Main Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--reads` | Glob pattern for paired FASTQ files | `test-data/*_{1,2}.fastq.gz` |
+| `--referenceGenome` | Reference genome to use | `hg19` |
+| `--analysisName` | Output folder name | `test_analysis` |
+| `--design_matrix` | Design matrix for DSS | `''` |
+| `--design` | Alternate alias for the design matrix | `''` |
+| `--single_sample` | Skip DSS and run segmentation/annotation only | `false` |
+
+Supported reference genomes in the current configuration are:
+
+- `hg19`
+- `hg38`
 
 ---
 
 ## Output
 
-The pipeline generates a structured output directory organised by module:
+Outputs are published under the directory defined by `--analysisName`. The pipeline organises results by file type and functional interpretation across four main subdirectories:
 
-```
-results/
-├── qc/                  # FastQC / MultiQC reports
-├── trimming/            # Trimmed reads
-├── alignment/           # BAM files and alignment statistics
-├── methylation/         # CpG methylation tables (bedGraph / bismark coverage)
-├── dmr/                 # DMR tables and summary statistics
-├── annotation/          # Annotated DMR files
-└── report/              # Final HTML summary report
-```
+**BED files** (`bed/`): Genomic region annotations generated by MethylSeekR, including:
+- `*_UMRs.bed` - Unmethylated regions
+- `*_LMRs.bed` - Low-methylated regions  
+- `*_PMDs.bed` - Partially methylated domains
+
+**HTML reports** (`html/`): Interactive visualisations and quality reports:
+- `*_IGV.html` - Per-sample methylation profiles (igv-reports)
+- `multiqc_report.html` - Aggregated quality control report
+
+**PDF figures** (`pdf/`): High-resolution plots from segmentation and enrichment analysis:
+- `*_segmentPMDs.pdf` - PMD segmentation plot
+- `*_plotPMDSegmentation.pdf` - PMD example regions
+- `*_segmentUMRsLMRs.pdf` - UMR/LMR segmentation
+- `*_finalSegmentation.pdf` - Complete methylome segmentation summary
+- `*_annotation_bar.pdf` - DMR annotation distribution (annotatr)
+- `*_GREAT_*.pdf` - Functional enrichment plots (rGREAT)
+
+**TSV tables** (`tsv/`): Data tables for downstream analysis:
+- `DMRs.bed` - Differentially methylated regions
+- `*_annotated.tsv` - Full DMR annotations with genomic context
+- `*_annotation_summary.tsv` - DMR annotation summary by category
+- `*_GREAT_enrichment.tsv` - Functional enrichment table (rGREAT)
+
+---
+
+## Modules Included
+
+- `fastqc`
+- `trimgalore`
+- `multiQC`
+- `bwamethAlign`
+- `markDuplicates`
+- `methylDackel`
+- `methylseekr`
+- `dss`
+- `annotatr`
+- `rgreat`
+- `igv`
 
 ---
 
-## Configuration
-
-Pipeline behaviour can be customised via `nextflow.config` and parameter files. Key parameters (reference genome, tool-specific settings, resource allocation) will be documented as development progresses.
-
----
-
-## Citation
-
-If you use Methyline in your research, please cite:
-
-> [Citation will be added upon publication]
-
----
 
 ## Author
 

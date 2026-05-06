@@ -5,9 +5,8 @@ params.genome_fasta  = params.referenceGenome == 'hg38' ? 'ref/hg38.fa*' : 'ref/
 params.design_matrix   = params.design_matrix ?: params.design ?: ''
 params.referenceGenome = params.referenceGenome ?: 'hg19'
 params.refGene         = params.referenceGenome == 'hg38' ? 'ref/refGene_hg38.txt.gz' : 'ref/refGene_hg19.txt.gz'
-params.empty_design    = params.empty_design ?: 'test-data/empty_design_matrix.tsv'
 params.single_sample   = params.single_sample ?: false
-params.analysisName    = params.analysisName ?: ''
+params.analysisName    = params.analysisName ?: 'test_analysis'
 
 include { fastqc }      from './modules/fastqc/main'
 include { trimgalore }  from './modules/trimgalore/main'
@@ -47,7 +46,7 @@ workflow {
             methylseekr.out.pmds
                 .map { sampleId, pmd -> pmd }
                 .collect(),
-            params.design_matrix ? file(params.design_matrix) : file(params.empty_design)
+            params.design_matrix ? file(params.design_matrix) : []
         )
 
             // Anotacion funcional de DMR
