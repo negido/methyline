@@ -1,12 +1,13 @@
 nextflow.enable.dsl=2
 
 params.reads           = params.reads ?: 'test-data/*_{1,2}.fastq.gz'
-params.genome_fasta  = params.referenceGenome == 'hg38' ? 'ref/hg38.fa*' : 'ref/hg19.fa*'
+params.genome_fasta  = params.referenceGenome == 'hg38' ? '/data/ref/hg38.fa*' : '/data/ref/hg19.fa*'
 params.design_matrix   = params.design_matrix ?: params.design ?: ''
 params.referenceGenome = params.referenceGenome ?: 'hg19'
-params.refGene         = params.referenceGenome == 'hg38' ? 'ref/refGene_hg38.txt.gz' : 'ref/refGene_hg19.txt.gz'
+params.refGene         = params.referenceGenome == 'hg38' ? '/data/ref/refGene_hg38.txt.gz' : '/data/ref/refGene_hg19.txt.gz'
+params.empty_design    = params.empty_design ?: 'test-data/empty_design_matrix.tsv'
 params.single_sample   = params.single_sample ?: false
-params.analysisName    = params.analysisName ?: 'test_analysis'
+params.analysisName    = params.analysisName ?: ''
 
 include { fastqc }      from './modules/fastqc/main'
 include { trimgalore }  from './modules/trimgalore/main'
@@ -36,6 +37,7 @@ workflow {
     methylDackel(markDuplicates.out.MARKED_DUP, file(params.genome_fasta))
     methylseekr(methylDackel.out.bedgraph)
 
+
     // Rama comparativa vs single-sample
     if (!params.single_sample) {
         // DMR con DSS (modo comparativo)
@@ -46,12 +48,23 @@ workflow {
             methylseekr.out.pmds
                 .map { sampleId, pmd -> pmd }
                 .collect(),
-            params.design_matrix ? file(params.design_matrix) : []
+            params.design_matrix ? file(params.design_matrix) : file(params.empty_design)
         )
-
+        pairwise_dmrs = dss.out.dmr_full
+        .flatMap { tag, beds ->
+             beds.collect { bed ->
+                 tuple(bed.baseName, bed)
+            }
+        }
+        pairwise_dmrs_rgreat = dss.out.dmr_bed
+        .flatMap { tag, beds ->
+             beds.collect { bed ->
+                 tuple(bed.baseName, bed)
+            }
+        }
             // Anotacion funcional de DMR
-        annotatr(dss.out.dmr_bed,params.referenceGenome)
-        rgreat(dss.out.dmr_bed)
+        annotatr(pairwise_dmrs,params.referenceGenome)
+        rgreat(pairwise_dmrs_rgreat)
 
             // Informe calidad
         multiQC(
@@ -61,8 +74,7 @@ workflow {
                 .mix(trimgalore.out.fastqc_html)
                 .mix(trimgalore.out.fastqc_zip)
                 .mix(markDuplicates.out.MD_METRICS)
-                .mix(dss.out.status)
-                .collect()
+		.collect()
         )
 
         // Visualizacion IGV con DMRs como regiones de interés
@@ -72,7 +84,7 @@ workflow {
             file(params.genome_fasta),
             params.referenceGenome,
             file(params.refGene),
-            dss.out.dmr_bed.ifEmpty { file("NO_FILE") }
+            dss.out.consensus_bed.ifEmpty { file("NO_FILE") }
         )
     } else {
         // Anotacion funcional de regiones LMR/UMR/PMD

@@ -15,6 +15,6 @@ process trimgalore {
     script:
     def paired = reads.size() == 2 ? '--paired' : ''
     """
-    trim_galore --cores ${task.cpus} --clip_R1 10 --clip_R2 10 --three_prime_clip_R1 5 --three_prime_clip_R2 5 --fastqc --gzip $paired $reads
+    trim_galore --cores ${task.cpus} --clip_R1 10 --clip_R2 10 --three_prime_clip_R1 10 --three_prime_clip_R2 10 --fastqc --gzip $paired $reads
     """
 }

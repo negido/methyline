@@ -9,9 +9,12 @@ process methylDackel {
     output:
     //tuple val(sampleId), path("*_CpG.txt"), emit: methylation
     tuple val(sampleId), path("*.bedGraph"), emit: bedgraph
+    tuple val(sampleId), path("*.cytosine_report_filter.txt"), emit: cytosine_report
 
     script:
     """
-    MethylDackel extract -o ${sampleId} ${params.referenceGenome}.fa ${bam}
+    MethylDackel extract -o ${sampleId} -@ ${task.cpus} ${params.referenceGenome}.fa ${bam}
+    MethylDackel extract  --cytosine_report -@ ${task.cpus} -o ${sampleId} ${params.referenceGenome}.fa ${bam}
+    awk '\$4+\$5 > 0' ${sampleId}.cytosine_report.txt > ${sampleId}.cytosine_report_filter.txt 
     """
 }

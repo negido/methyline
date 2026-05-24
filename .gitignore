@@ -1,0 +1,11 @@
+work/
+.nextflow/
+.nextflow.log*
+logs/
+*.log
+*.fastq.gz
+node_modules/
+apps/*
+apps/web/.vite/
+.env
+norm_alz/
