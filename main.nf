@@ -45,9 +45,6 @@ workflow {
             methylDackel.out.bedgraph
                 .map { sampleId, bedgraph -> bedgraph }
                 .collect(),
-            methylseekr.out.pmds
-                .map { sampleId, pmd -> pmd }
-                .collect(),
             params.design_matrix ? file(params.design_matrix) : file(params.empty_design)
         )
         pairwise_dmrs = dss.out.dmr_full
