@@ -1,9 +1,9 @@
 annot.type	n
-hg19_cpg_inter	68
-hg19_cpg_islands	4
-hg19_cpg_shelves	4
-hg19_cpg_shores	6
-hg19_genes_exons	11
-hg19_genes_intergenic	36
-hg19_genes_introns	33
-hg19_genes_promoters	12
+hg19_cpg_inter	4337
+hg19_cpg_islands	2570
+hg19_cpg_shelves	338
+hg19_cpg_shores	1599
+hg19_genes_exons	2924
+hg19_genes_intergenic	1038
+hg19_genes_introns	5775
+hg19_genes_promoters	2741

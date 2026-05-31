@@ -103,23 +103,29 @@ Rscript - <<'EOF'
                 paste0(sid, "_annotation_summary.tsv"),
                 sep = "\t", quote = FALSE, row.names = FALSE)
 
-    # ── Enriquecimiento (Fisher + BH) ─────────────────────────────────────────
-    bg_df    <- as.data.frame(build_annotations(genome      = genome,
-                                                annotations = c(cpg_annots,
-                                                                gene_annots)))
+        # ── Enriquecimiento (Fisher/chi-cuadrado + BH) ───────────────────────────
+    bg_df    <- as.data.frame(build_annotations(genome = genome, annotations = c(cpg_annots,gene_annots)))
     all_cats <- sort(unique(annot_df[["annot.type"]]))
-
     enrich_df <- do.call(rbind, lapply(all_cats, function(cat) {
-        ft <- fisher.test(matrix(
-            c(sum(annot_df[["annot.type"]] == cat),
-              nrow(annot_df) - sum(annot_df[["annot.type"]] == cat),
-              sum(bg_df[["type"]] == cat),
-              nrow(bg_df)    - sum(bg_df[["type"]] == cat)),
-            nrow = 2))
+        tab <- matrix(
+            as.numeric(c(sum(annot_df[["annot.type"]] == cat),
+                         nrow(annot_df) - sum(annot_df[["annot.type"]] == cat),
+                         sum(bg_df[["type"]] == cat),
+                         nrow(bg_df)    - sum(bg_df[["type"]] == cat))),
+            nrow = 2, byrow = TRUE)
+        chi <- suppressWarnings(chisq.test(tab, correct = FALSE))
+        use_fisher <- any(chi[["expected"]] < 5)
+        test_res <- if (use_fisher) fisher.test(tab) else chi
+        odds_ratio <- if (tab[1, 2] == 0 || tab[2, 1] == 0) {
+            Inf
+        } else {
+            (tab[1, 1] * tab[2, 2]) / (tab[1, 2] * tab[2, 1])
+        }
         data.frame(annotation = cat,
                    n_dmr      = sum(annot_df[["annot.type"]] == cat),
-                   odds_ratio = as.numeric(ft[["estimate"]]),
-                   pval       = ft[["p.value"]])
+                   odds_ratio = odds_ratio,
+                   pval       = test_res[["p.value"]],
+                   test       = ifelse(use_fisher, "fisher", "chisq"))
     }))
     enrich_df[["padj"]] <- p.adjust(enrich_df[["pval"]], method = "BH")
     enrich_df[["enriched"]] <- ifelse(
