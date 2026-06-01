@@ -13,7 +13,7 @@ process methylDackel {
 
     script:
     """
-    MethylDackel extract -o ${sampleId} -@ ${task.cpus} ${params.referenceGenome}.fa ${bam}
+    MethylDackel extract --mergeContext -o ${sampleId} -@ ${task.cpus} ${params.referenceGenome}.fa ${bam}
     MethylDackel extract  --cytosine_report -@ ${task.cpus} -o ${sampleId} ${params.referenceGenome}.fa ${bam}
     awk '\$4+\$5 > 0' ${sampleId}.cytosine_report.txt > ${sampleId}.cytosine_report_filter.txt 
     """
